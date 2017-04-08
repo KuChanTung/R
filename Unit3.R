@@ -1,217 +1,403 @@
 ####################
-#### Unit 3 R codes
+#### Unit 5 - Introduction to Statistical Learning
+#### R codes
 ####################
 
-library("vcd") # Load package "vcd" for data "Arthritis"
-data(Arthritis)
-mytable = xtabs(~ Treatment + Improved, data=Arthritis)
-addmargins(mytable) # marginal sums
-addmargins(prop.table(mytable)) # marginal percentages
+library(data.table); library(ggplot2)
+# advertising data, skip the frist column
+advertise = data.table::fread("http://www-bcf.usc.edu/~gareth/ISL/Advertising.csv",
+                              verbose = T, stringsAsFactors = F, data.table = F, drop = 1) 
 
-# Histogram
-ggplot(Arthritis, aes(x = Arthritis$Treatment, fill=Arthritis$Improved)) + geom_bar()
+# Plot (TV, Radio, Newspaper) by Sales, with regression line 
+gp = Map(function(x) ggplot(advertise, aes(advertise[,x], Sales) ) + geom_point() + xlab(x) + stat_smooth(method = lm),
+         colnames(advertise[,-4]) )
+gridExtra::marrangeGrob(gp, ncol = 3, nrow= 1)
 
-library(gmodels)
-CrossTable(Arthritis$Treatment, Arthritis$Improved, chisq = T, fisher = T,
-           format ="SAS")
 
-# Get the five numbers for "mpg" of
-# mtcars given different "am"
-lapply(split(mtcars$mpg, mtcars$am),FUN = fivenum)
+# log-likelihood function for later MLE
+LL = function(beta0, beta1){
+  # Residuals
+  resid = advertise$Sales - (advertise$TV * beta1) - beta0
+  # Likelihood for the residuals 
+  ll = dnorm(resid, 0, 1); 
+  # Sum of the log likelihoods for all of the data points 
+  return(-sum(log(ll)));
+}
+# Maximum likelihood estimation of parameter values
+stats4::mle(LL, start = list(beta0 = 0, beta1 = 0))
+# Or, just use lm() to make our life easier. 
+lm(Sales ~ TV, advertise) # Note that lm() in R uses OLS instead
 
-# Boxplot
-qplot(factor(am,levels = c(0,1), labels = c('Automatic','Manual')),
-      mpg,data = mtcars,geom = "boxplot",xlab = "Transmission")
+ad_fit = lm(Sales ~ TV + Radio + Newspaper, data = advertise)
+summary(ad_fit); ad_fit
 
-# Histogram with density curve for MPG
-hist(mtcars$mpg, freq=F, breaks=10, col="red", xlab="MPG", main="Histogram with density curve")
-lines(density(mtcars$mpg), col="blue", lwd=2)
+resid = advertise$Sales - predict(ad_fit, advertise) # or just residuals(ad_fit)
+qqnorm(resid); qqline(resid)
 
-# By different "am". Use ggplot instead.
-ggplot(mtcars, aes(x = mtcars$mpg, fill=factor(mtcars$am))) + geom_density(alpha=0.3) + xlim(0,50)
+# RMSE for training dataset
+rmse_lm = function(f, d){
+  m = lm(formula = f, data = d, na.action = na.omit);
+  return(  round(sqrt(mean(resid(m)^2)),4)) ;
+}
+# e.g.rmse_lm(Sales ~ Radio, advertise)
 
-# Fair coin (p=0.5)
-dbinom(x = 5,size = 10,prob = 0.5)
+# Leave-one-out CV RMSE for lm()
+LOOCV_lm_rmse = function(f, d){
+  numOfRec = nrow(d);
+  rmse_vec = rep(0,numOfRec); # n RMSE
+  reponse_var = all.vars(f)[1]; # Get the name of reponse variable
+  
+  for(i in 1:numOfRec){
+    m = lm(formula=f, data=d[- i,],na.action = na.omit);
+    rmse_vec[i] = (d[[reponse_var]][i]) - predict(m,newdata=d[i,]);
+  }
+  return( paste("LOOCV RMSE for lm(", format(f),") =", 
+                round(sqrt(mean(rmse_vec ^ 2)),4)) );
+}
 
-# Histogram for binomial random numbers given p=0.5, size = 10
-qplot(rbinom(10e3, 10, 0.5), geom = "histogram") +
-  scale_x_continuous(breaks = 0:10) +
-  theme(axis.text= element_text(size=15))
+# A bit more functional-style version of LOOCV_lm_rmse()
+LOOCV_lm_rmse = function(f, d){
+  errs = sapply(1:nrow(d), FUN = function(k){
+    reponse_var = all.vars(f)[1]; # Name of reponse variable
+    m = lm(f, d[- k,], na.action = na.omit)
+    return((d[[reponse_var]][k]) - predict(m, newdata = d[k,]))
+  })
+  return(round(sqrt(mean(errs ^ 2)),4))
+}
 
-# Is this a fair dice?
-pointFreq1 = c( 31, 22, 17, 13, 9, 8)
-chisq.test(x = pointFreq1,p = rep(1/6, 6))
-# How about this one?
-pointFreq2 = c( 17, 16, 15, 12, 19, 21)
-chisq.test(x = pointFreq2,p = rep(1/6, 6))
+Map(function(x) LOOCV_lm_rmse(x, advertise), 
+    list(Sales ~ TV, Sales ~ Radio, Sales ~ Newspaper, Sales ~ Radio + TV, Sales ~ TV + Radio + Newspaper)) 
 
-set.seed(0)
-# normal vs uniform
-twoDists = data.frame("data"= c(rnorm(100,0,1), runif(100, -3, 3)),
-                      "dist" = factor( c(rep("normal",100), rep("uniform",100))) )
-ggplot(twoDists, aes(x = twoDists$data, fill=factor(twoDists$dist) )) + geom_density(alpha=0.3) + xlim(-5,5)
-twoDists_2c = split(twoDists$data, twoDists$dist)
-ks.test(twoDists_2c$normal,twoDists_2c$uniform)
+# Standardize all variables using scale()
+z_advertise = data.frame(scale(advertise))
+z_advertise_lm = lm(Sales ~ TV + Radio + Newspaper, z_advertise)
+data.frame(abs_std_coef = abs(z_advertise_lm$coefficients[-1]))
 
-# H0: sample is taken from a normal distribution
-shapiro.test(mtcars$mpg)
-ks.test(scale(mtcars$mpg), "pnorm")
+# Rank based on absolute t-statistics
+caret::varImp(z_advertise_lm)
+# variable importance from randomForest 
+z_advertise_rf = randomForest::randomForest(Sales ~ TV + Radio + Newspaper, z_advertise)
+randomForest::importance(z_advertise_rf)
 
-nortest::lillie.test(faithful$waiting)
+Map(function(x) LOOCV_lm_rmse(x, advertise), 
+    list(Sales ~ TV + Radio, Sales ~ TV + Radio + Newspaper)) 
 
-# Try It! (DownloadFestival)
-dlfest = read.table("http://www.statisticshell.com/r_files/DownloadFestival%28No%20Outlier%29.dat",
-                    header = T, fill = T )
+LOOCV_lm_rmse(Sales ~ TV * Radio, advertise) 
 
-# Say "dlfest" is the dataset.
-# Create q-q plot for "day1"
-qqnorm(dlfest$day1); qqline(dlfest$day1)
+summary(lm(Sales ~ TV * Radio, advertise))
 
-library(reshape2)
-qplot(dlfest$day1, geom = "density")
+# Variable importance
+# Rank importance based on absolute t-statistics
+library("randomForest"); library("caret"); library("ISLR"); data("Auto")
+# Only keep variables we need
+Auto_xy = Auto[, ! colnames(Auto) %in% c("name", "year")]
+lm_Auto = lm(mpg ~ ., data = Auto_xy)
+summary(lm_Auto)
+cbind(abs(lm_Auto$coefficients)[-1], caret::varImp(lm(mpg ~ . , data = Auto_xy)),
+      importance(randomForest(mpg ~ ., data = Auto_xy)))
 
-dlfest_long = melt(data = dlfest, id.vars = c("ticknumb", "gender"))
+Hmisc::rcorr(as.matrix(Auto_xy[, ! colnames(Auto_xy) %in% c("name", "year")]),type = "spearman")
 
-# Density plot for 3 days
-ggplot(dlfest_long, aes(x = dlfest_long$value, fill=factor(dlfest_long$variable))) +
-  geom_density(alpha=0.3)
+Map(function(x) LOOCV_lm_rmse(x, Auto_xy), 
+    list(mpg ~ . -origin, mpg ~ . + displacement:cylinders, mpg ~ .  - acceleration)) 
+Map(function(x) LOOCV_lm_rmse(x, Auto_xy), 
+    list(mpg ~ . -origin, mpg ~ . + displacement:cylinders, mpg ~ .  - acceleration)) 
+Map(function(x) summary(lm(x, Auto_xy)), 
+    list(mpg ~ ., mpg ~ . + displacement:cylinders, mpg ~ . + displacement:cylinders - acceleration))
 
-# Normality Tests
-Map(dlfest[,paste("day", 1:3, sep="")],
-    f = function(x) list("shapiro" = shapiro.test(x),
-                         "lillie" = nortest::lillie.test(x),
-                         "Anderson" = nortest::ad.test(x)))
-# Only day1 may be considered "normally-distributed"
+Map(function(x) summary(lm(x, Auto_xy)), 
+    list(mpg ~ (cylinders +displacement +horsepower +weight  + acceleration +origin)^2
+         , mpg ~ . + displacement:cylinders, mpg ~ . + displacement:cylinders - acceleration))
 
-# Paired/repeated measures tests
 
-# Parametric, assuming the distributions of day1/day2 are normal
-t.test(dlfest$day1, dlfest$day2, paired = T)
-# Equivalanet to below 1-sample t test
-diff = dlfest$day1 - dlfest$day2
-t.test(diff)
+library("caret"); library("doMC");
+registerDoMC(cores = detectCores() - 1 ) # DO NOT use all CPU cores
 
-# Non-Parametric, Wilcoxon rank sum test (more
-# popularly known as the Mann–Whitney U test)
-wilcox.test(dlfest$day1, dlfest$day2, paired = T)
+rfe_auto = caret::rfe(x = Auto_xy[,-1], y = Auto_xy$mpg, metric = "RMSE",
+                      rfeControl = rfeControl(method = "LOOCV", functions =  rfFuncs,  allowParallel = T))
+rfe_auto$optVariables
+
+data(state); murder = data.frame(state.x77)
+
+varImp(lm(Murder ~ ., data = murder))
+murder_rf = randomForest(Murder ~ ., data = murder, ntree = 100); importance(murder_rf)
+# Let's try RFE
+caret::rfe(x = murder[,-5], y = murder$Murder, metric = "RMSE",
+           rfeControl = rfeControl(method = "LOOCV", functions =  lmFuncs,  allowParallel = T))
+
+# Hands-on mixed feature selection
+# Step 1 - bivariate analysis
+Map(function(x) {fit = lm(x, data = murder); anova(fit)$"Pr(>F)"[1]}, 
+    Map(as.formula, paste("Murder ~", colnames(murder)[-5])))
+# Step 2 - fit model with those variables with p-values < 0.1
+summary(lm(Murder ~ Population + Illiteracy + Life.Exp + HS.Grad + Frost, murder))
+
+# Step 3 - fit model again but remove those variables with p-values < 0.1
+summary(lm(Murder ~ Population + Illiteracy + Life.Exp + HS.Grad , murder))
+
+Hmisc::rcorr(as.matrix(murder,type = "spearman"))
+
+Map(function(x) LOOCV_lm_rmse(x, murder), 
+    list(Murder ~ Population + Illiteracy + Life.Exp + HS.Grad + Frost, 
+         Murder ~ Population + Illiteracy + Life.Exp + HS.Grad,
+         Murder ~ Population + Illiteracy + Life.Exp,
+         Murder ~ Population + Illiteracy + Life.Exp * HS.Grad))
+
+# polynomial regression
+Auto_xy_hp2 = transform(Auto_xy, horsepower2 = horsepower ^ 2 )
+summary(lm(mpg ~ horsepower + horsepower2, Auto_xy_hp2)) 
+# Or, just use I()
+summary(lm(mpg ~ horsepower + I(horsepower ^ 2), Auto_xy)) 
+
+summary(lm(mpg ~ poly(horsepower, degree = 5), data = Auto_xy))
 
 #
-library("MASS"); UScrime = as.data.frame(UScrime)
-UScrime$So = as.factor(UScrime$So)
-# Consider built-in dataset MASS::USCrime"
-ggplot(UScrime, aes(x = UScrime$Prob, fill=factor(UScrime$So))) + geom_density(alpha=0.3)
+library("ISLR"); data("Default")
+glm_default = glm(default ~ balance, data = Default, family = "binomial")
+summary(glm_default)
 
-# We here compare "Southern and non-Southern states" (So) on the "probability of
-# imprisonment" (Prob) without the assumption of equal variances of "So"
-t.test(formula = Prob ~ So, data = UScrime)
+glm_default = glm(default ~ student, data = Default, family = "binomial")
+summary(glm_default)
 
-usc_lm = lm(Prob ~ So, data = UScrime)
-summary(usc_lm)
+p = prop.table(xtabs( ~ student + default, Default), margin = 1); p
 
-car::Anova(usc_lm, type=3)
+odds = p[,2] / p[,1]
+odds[2] / odds[1] # odd ratio
 
-# Normality tests
-library("nortest")
-Map(function(f) f(UScrime$Prob), c(shapiro.test, lillie.test, ad.test) )
-# Wilcoxon rank-sum test
-wilcox.test(Prob ~ So, data = UScrime)
+glm_default = glm(default ~ balance + student, data = Default, family = "binomial")
+summary(glm_default)
+glm_default$coefficients
+exp(-0.714877620)
 
-library(multcomp) # Get "cholesterol" dataset
-cholesterol = as.data.frame(cholesterol)
-
-?cholesterol
-qplot(trt,response,data = cholesterol,geom = "boxplot",xlab = "Treatment")
-
-# H0: all group means are equal
-cho_aov = aov(response ~ trt, data = cholesterol); summary(cho_aov) # ANOVA
-
-# Equivalent to lm()
-cho_lm = lm(response ~ trt, data = cholesterol);
-
-summary(cho_lm)
-
-car::Anova(cho_lm,type = 3)
-
-# A trained model can also be used to predict
-predict(cho_lm ,newdata = data.frame(trt=c("1time","drugD")))
-
-summary.lm(cho_aov)
-cholesterol_c = cholesterol;
-
-#"4 times" as reference level
-contrasts(cholesterol_c$trt) = contr.treatment(5, base=3)
-cho_aov = aov(response ~ trt, data = cholesterol_c);
-summary.lm(cho_aov)
-
-TukeyHSD(cho_aov)
-# H0: medians of all groups are equal
-kruskal.test(response ~ trt, data = cholesterol)
-
-# The correlations among mpg, hp, and wt
-Hmisc::rcorr(as.matrix(mtcars[,c("mpg","hp","wt")]),type = "pearson")
-
-# A strong positive correlation between x and y
-x = c(3, 13,14,55,56); y = c(49,50, 66, 99,1000)
-cor.test(x,y,method = "pearson"); cor.test(x,y,method = "spearman")
-
-# May not be able to compute p-value if sample size is big and there # are some ties!
-cor.test(x, y, method = "kendall")
-
-# Correlation before controlling for wt
-mpg_hp = cor(mtcars$mpg, mtcars$hp,method = "pearson")
-mpg_hp ^ 2 # R squared (coefficient of determination)
+epiDisplay::logistic.display(glm_default)
 
 
-# Correlation after controlling for wt
-mpg_hp.ctl.wt = ppcor::pcor.test(mtcars$mpg, mtcars$hp, mtcars[,c("wt")], method = "pearson"); mpg_hp.ctl.wt
-mpg_hp.ctl.wt$estimate ^ 2
+glm_default = glm(x - default ~ student + balance, data = Default, family = "binomial")
+glmnet_default = glmnet::glmnet(x = ~ student + balance, data = Default, family = "binomial")
 
-# correlated data analysis
-read_age = data.frame(
-  subjID= rep(1:6, each=2),
-  read_ability = c(90, 95,  80, 85, 78, 88, 50, 58, 50, 61, 10, 14),
-  age = c(10, 15, 11, 16, 18, 23, 18, 21, 23, 26, 22, 26 ),
-  gender = factor(rep(c('F','M','F','F','F','M'),each = 2), levels=c('F','M')) )
+## logistic regression for classification
+set.seed(1); numOfRows = nrow(Default) # Number of observations
+# Split dataset into training and testing
+train_idx = sample(1:numOfRows,size = numOfRows * 0.7) # 70% (7,000) as training
+test_idx = setdiff(1:numOfRows, train_idx) # 3,000 as testing
+default_LR = glm(default ~ student + balance, data = Default[train_idx,], family = "binomial")
+test_pred_prob = predict(default_LR, newdata = Default[test_idx,],type = "response")
+hist(test_pred_prob, xlab = "Predicted Probability")
 
-# ** This is WRONG! **
-summary(lm(read_ability ~ age, read_age)) # Simple linear regression
+# Distribution of our discrete outcome
+prop.table(table(Default[train_idx,]$default))
 
-read_age$timepoint = rep(c("timepoint1","timepoint2"),6)
-read_age_w = dcast(data = read_age, formula = subjID ~ timepoint, value.var = "read_ability")
-read_age_w$gap = read_age_w$timepoint1 - read_age_w$timepoint2
-wilcox.test(read_age_w$gap, mu = 0)
+# 3 confusion matrices for 3 cutoffs
+pred_class = Map(function(x) factor(ifelse( test_pred_prob > x, "Yes", "No")), list(0.8, 0.5, 0.1) )
+CMs = Map(function(x) table(relevel(x,"Yes"), relevel(Default[test_idx, "default"], "Yes") ) , pred_class)
+CMs
 
-wilcox.test(read_age$read_ability ~ read_age$timepoint, paired=T)
-t.test(read_age$read_ability ~ read_age$timepoint, paired=T)
+library("pROC")
+default_glm_roc = roc(Default[test_idx, "default"], test_pred_prob)
 
+# ROC for 3 cutoffs
+plot.roc(default_glm_roc,print.thres = c(0.8, 0.5, 0.1), print.auc=T)
 
-library("lme4") # linear mixed-effect models
-summary(lmer(read_ability ~ age + gender + ( 1| subjID), read_age))
+# Optimal threshold/cutoff based on Youden's Index 
+# Notice that, again, in real-world applications, you should use an independent # sample (instead the testing data in our sample code) to identify this cutoff.
+plot.roc(default_glm_roc,print.thres = "best", print.thres.best.method="youden", print.auc = T)
 
-# Binomail probability distribution given p(head) = 0.3
-round(dbinom(0:10,size = 10,prob = 0.3), digits = 5)
-
-# Generate outcomes that follow the binomial
-# distribution with parameter θ, p(head) = 0.2
-set.seed(1); x = rbinom(100,10,0.2); x
-
-# Let's reuse previous "x" as that outcome for simulation
-set.seed(1); x = rbinom(100,10,0.2)
-# Function used to calculate the likelihood
-LL_binom = function(p){
-  ll = dbinom(x,10,p); return(-sum(log(ll)));
+# k-fold CV confusion matrix for Logistic Regression model
+# f: formula, d: data, k: number of folds, cutoff: cutoff point 0-1
+k_fold_CV_logit = function(f, d, k, cutoff){
+  numOfRec = nrow(d) # number of observations
+  reponse_var = all.vars(f)[1] # name of the reponse variable
+  # k indices used to split data into k parts
+  sample_idx_k = rep(sample(1:k),round(numOfRec / k) + 1)[1:numOfRec]
+  # k models for k subsets of data
+  k_fits = Map( function(x) glm(f, d[sample_idx_k != x, ], family = "binomial"), 1:k)
+  # Predicted & actual classes for each hold-out subset 
+  predActualClass = Map(function(x){
+    predictedProb = predict(k_fits[[x]], d[sample_idx_k == x,], type = "response")
+    predictedClass = ifelse(predictedProb > cutoff, 1, 0)
+    return(data.frame("predictedClass" =  predictedClass, "actualClass" = d[sample_idx_k == x, reponse_var] ) )
+  }, 1:k)
+  # A data frame with all predicted & actual classes
+  output_DF = Reduce(function(x, y) rbind(x, y), predActualClass)
+  output_DF$predictedClass = factor(output_DF$predictedClass, levels=c(0,1),labels = c("No", "Yes"))
+  return( table(output_DF$predictedClass, output_DF$actualClass))
 }
-# Maximum likelihood estimate of the parameter, 0 <= P(H) <= 1
-# The goal is to find a P(H) that maximize likelihood.
-bbmle::mle2(LL_binom, start = list(p = 0.5), method="Brent",
-            lower = 0, upper = 1 )
 
-# Take a look the coefficients of below model
-lm(data = mtcars, formula= mpg ~ wt)
-# We can do it by using MLE instead
-LL_LM = function(beta0, beta1) {
-  resid = mtcars$mpg - (mtcars$wt * beta1) - beta0; # calculate residuals
-  ll = dnorm(resid, 0, 1); # likelihood for the residuals
-  return(-sum(log(ll))); #sum of the log likelihoods
-}
-bbmle::mle2(LL_LM, start = list(beta0 = 0, beta1 = 0), method="Nelder-Mead")
+# Different cutoffs
+Map(function(cutoff) k_fold_CV_logit(default ~ student + balance, Default[train_idx,], 10, cutoff),
+    list(0.8, 0.5, 0.1))
+
+# Different k
+Map(function(k_fold) k_fold_CV_logit(default ~ student + balance, Default[train_idx,], k_fold, 0.5),
+    list(5, 10, 20))
+
+# Accuracy of prediction for models with different feature set
+Map(function(x) sum(diag(k_fold_CV_logit(x, Default[train_idx,], 10, 0.5))) / nrow(Default[train_idx,]),
+    list(default ~ student,  default ~ balance, default ~ student + balance, default ~ student + balance + income ))
+
+# Try it
+titanic = read.table("http://biostat.mc.vanderbilt.edu/wiki/pub/Main/DataSets/titanic.txt",
+                     header = T, sep = ",", stringsAsFactors = T, strip.white = T)
+
+# Using package "rpart" (Recursive Partitioning and Regression Trees)
+library(ISLR); library(rpart); library(rpart.plot); data(Hitters)
+# Building regression tree with depth = 2
+hitSalary_RT = rpart(log(Salary) ~ Years + Hits, Hitters, 
+                     control = rpart.control(maxdepth = 2))
+# Plot it!
+rpart.plot(hitSalary_RT, digits = 3)
+
+# Regression tree for Hitters again but with 10-fold CV
+set.seed(1)
+hitSalary_RT = rpart(log(Salary) ~ Years + Hits, Hitters, 
+                     control = rpart.control(xval = 10, cp = 0))
+# Plot tree
+rpart.plot(hitSalary_RT, digits = 3)
+
+# Print errors and cost-complexity parameters
+printcp(hitSalary_RT)
+
+# Plot cost-complexity parameters (CP) to help select the best tree 
+plotcp(hitSalary_RT)
+
+# If we'd like a CP table with "real" values:
+realCPTable = data.frame(printcp(hitSalary_RT))
+Map(function(x) realCPTable[,x] <<- realCPTable[,x] * 0.78766, list(1,3,4,5 ))
+
+
+# Seems that a tree with 2 or 3 splits (3 or 4 leaves) perform
+# relatively ok. Let's say we'd like the tree with 3 splits. We can 
+# prune the tree as:
+# Always prune tree with cp threshold higher then cp of the tree we need 
+hitSalary_RT_3split = prune(hitSalary_RT,cp = 0.019)    
+printcp(hitSalary_RT_3split)
+# Plot the tree
+rpart.plot(hitSalary_RT_3split)
+
+# k-fold CV + 1 SE
+realCPTable$xerr_1std = realCPTable$xerror + realCPTable$xstd
+
+# Let rpart() select its best tree
+hitSalary_RT = rpart(log(Salary) ~ Years + Hits, Hitters, 
+                     control = rpart.control(xval = 10))
+rpart.plot(hitSalary_RT)
+
+# Download heart dataset, skip the first column
+heart = read.table("http://www-bcf.usc.edu/~gareth/ISL/Heart.csv", header = T, sep = ",")[,-1]
+# Fully-grown tree with 13 leaves
+set.seed(1)
+heart_CT = rpart(AHD ~ ., data = heart, control = rpart.control( cp = 0, xval = 10))
+# Show all possible cost-complexity prunings
+plotcp(heart_CT); printcp(heart_CT)
+# Let rpart select the best tree (a tree with 5 splits?) 
+seet.seed(1)
+heart_best_CT = rpart(AHD ~ ., data = heart, control = rpart.control(xval = 10))
+printcp(heart_best_CT)
+rpart.plot(heart_best_CT,extra = 1)
+
+# Split dataset into training and testing
+library(ISLR); library(randomForest); data(Hitters)
+Hitters = na.omit(Hitters);numOfRows = nrow(Hitters) 
+set.seed(1); train_idx = sample(1:numOfRows,size = numOfRows * 0.7) # 70%  as training
+test_idx = setdiff(1:numOfRows, train_idx) # 30% as testing
+# Build a random forest with 500 trees (by default)
+set.seed(1)
+hitSalary_RF = randomForest(log(Salary) ~ Years + Hits, Hitters[train_idx,])
+# Plot the "Errors vs. # of trees". Or just enter "plot(hitSalary_RF)" 
+qplot(1:500, hitSalary_RF$mse, geom = "line") + labs(x = "# of trees", y = "MSE")
+
+# Get RMSEs for 5 different models
+hitters_RMSE = Map(function(f){ 
+  set.seed(1)
+  fit = f(log(Salary) ~ Years + Hits, Hitters);
+  pred_response = predict(fit, newdata = Hitters[test_idx,]);
+  return(sqrt(mean( (pred_response - log(Hitters[test_idx,"Salary"]) ) ^2)) );
+},list("RF_50" = function(f, d) randomForest(formula = f, data = d, ntree=50),
+       "RF_200" = function(f, d) randomForest(formula = f, data = d, ntree=200),
+       "RF_500" = function(f, d) randomForest(formula = f, data = d, ntree=500),
+       "RT" = rpart, "LM" = lm))
+
+# Heart dataset again!
+heart = read.table("http://www-bcf.usc.edu/~gareth/ISL/Heart.csv", header = T, sep = ",")[,-1]
+heart = na.omit(heart); numOfRows = nrow(heart)
+set.seed(1); train_idx = sample(1:numOfRows,size = numOfRows * 0.7) 
+test_idx = setdiff(1:numOfRows, train_idx) 
+heart_RF = randomForest(AHD ~ ., heart[train_idx,])
+heart_RF_err = reshape2::melt(heart_RF$err.rate)
+colnames(heart_RF_err) = c("n_of_trees", "err.typ","err.rate")
+qplot(n_of_trees, err.rate, color=err.typ,data = heart_RF_err, geom="line") + ylim(0.05, 0.3)
+heart_RF
+
+library(pROC)
+# ROC and AUCs for testing data
+heart_measures = Map(function(f){ 
+  set.seed(1);
+  fit = f(AHD ~ ., heart[train_idx,]);
+  # Get predicted probability for ROCs
+  if(class(fit)[1] == "glm"){
+    pred_prob = predict(fit, newdata = heart[test_idx,], type = "response");
+  }else{
+    pred_prob = predict(fit, newdata = heart[test_idx,], type = "prob")[, "Yes"];
+  }
+  return(roc(heart[test_idx, "AHD"], pred_prob));
+},list("RF_500" = randomForest,"CT" = rpart, 
+       "Logistic" = function(f, d) glm(formula = f, data = d, family="binomial") ))
+
+# Plot ROCs
+plot.roc(heart_measures[[1]], col = "blue")
+plot.roc(heart_measures[[2]], add = T, col="red")
+plot.roc(heart_measures[[3]], add = T, col="yellow")
+legend("bottomright", legend=c("RandomForest", "CART","Logistic"),
+       col=c("blue", "red", "yellow"), lwd=2)
+# Get all AUCs
+Map(function(x) x$auc, heart_measures)
+
+# Principal component analysis
+data(USArrests)
+X = scale(as.matrix(USArrests)) # Center the data
+# Covariance matrix
+cov_X = cov(X)
+
+# Eigen decomposition of the covariance matrix
+eigen_arrest = eigen(cov_X)
+# 1st PC with loadings
+eigen_arrest$vectors[,1]
+# 1st PC score
+as.matrix(X) %*% matrix(eigen_arrest$vectors[,1], ncol = 1) 
+
+svd_arrest = svd(X)
+# PCA using princomp()
+pc_arrest = princomp(X, scores = T)
+# loadings of each PC
+pc_arrest$loadings
+# scores of each PC
+pc_arrest$scores
+# percentage of explained variance 
+pc_arrest$sdev ^2 / sum((pc_arrest$sdev)^2)
+# A biplot should help you understand more about PCs
+biplot(pc_arrest)
+# Better biplot ggbiplot::ggbiplot() 
+# library("devtools"); install_github("vqv/ggbiplot")
+ggbiplot(pc_arrest,labels = rownames(X),labels.size = 5 )
+ggscreeplot(pc_arrest)
+
+# A simple DTM
+dtm = data.frame("programming"=c(2,0,3,0,3), "database"=c(3,3,4,0,0), 
+                 "SQL" = c(1,2,5,0,0), "finance" = c(0,2,0,5,0), 
+                 "market" = c(0,1,0,3,0), "data" = c(1,2,0,2,2))
+rownames(dtm) = paste("doc", 1:5, sep = "_")
+
+# LSA using SVD
+dtm_svd = svd(dtm) 
+
+dtm_loc = data.frame("doc_term" = c(rownames(dtm),colnames(dtm)),
+                     "dt_type" = c(rep("document",5), rep("term",6)),
+                     "x1" = c(dtm_svd$u[,1], dtm_svd$v[,1]),
+                     "x2" = c(dtm_svd$u[,2], dtm_svd$v[,2]) ) 
+
+ggplot(dtm_loc, aes(x = x1, y = x2, color=factor(dt_type))) + geom_point(size = 3) +
+  geom_text(aes(label=doc_term),hjust=0, vjust=0) + xlim(-0.75,0)
+
+
+
+

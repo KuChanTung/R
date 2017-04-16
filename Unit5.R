@@ -2,7 +2,6 @@
 #### Unit 5 - Introduction to Statistical Learning
 #### R codes
 ####################
-
 library(data.table); library(ggplot2)
 # advertising data, skip the frist column
 advertise = data.table::fread("http://www-bcf.usc.edu/~gareth/ISL/Advertising.csv",

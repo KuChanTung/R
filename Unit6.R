@@ -163,8 +163,7 @@ closeTo25Percentile = closeToNPercentile(25)
 closeTo10Percentile(mtcars$mpg)
 closeTo25Percentile(mtcars$mpg)
 
-closeToPercentile(50)(mtcars$mpg)
-
+closeToNPercentile(50)(mtcars$mpg)
 # An closeToNpercentle() factory but with a variable to count 
 # "how many times such functions are called by users".
 closeToNPercentile_ct = function(n){
@@ -186,19 +185,17 @@ library(ggplot2movies); data(movies)
 col2replace = paste("r", 1:10, sep="") # r1 to r10
 
 # Using bulit-in function It's a bit slow. 
-movies[, col2replace] = scale(movies[, col2replace])
 
 # Using loop with few iterations is faster.
 for(i in col2replace) movies[, i] = scale(movies[, i])
 
-# Using anonymous closure with access to parental dataset    
-
-Map(function(x) {movies[,x] <<- scale(movies[,x]);}, list(col2replace))
+# Using anonymous closure with access to parental dataset   
+Map(function(x) {movies[,x] <<- scale(movies[,x]);}, list(col2replace));
 
 # Raw functions can be stored in an R list
 sum_fun = list( min, max, mean, sd, median)
 # Serialized functions are just raw binary values stored in a vector 
-s_sum_fun = serialize(sum_fun, NULL)
+s_sum_fun = serialize(sum_fun, connection = NULL)
 unserialize(s_sum_fun)
 
 # Lists of functions in practice
@@ -210,11 +207,11 @@ my.summary(mtcars)
 
 # Functionals vs. loop
 
-# A trivial example to demonstrate loop pattern using functionals vs.loops
+# A trivial example to demonstrate loop pattern using functionals instead of loops
 m = matrix(rep(0,10^6), ncol = 10^3)
 microbenchmark(
   for(i in 1:10^3) for(j in 1:10^3) m[i,j] = i + j,
-  times = 1, unit = "s"
+  times = 5, unit = "s"
 )
 microbenchmark(
   Map(function(i){
@@ -244,9 +241,13 @@ library(randomForest)
 rf10 = randomForest(mpg ~ . , data = mtcars, ntree = 10)
 rf20 = randomForest(mpg ~ . , data = mtcars, ntree = 20)
 rf30 = randomForest(mpg ~ . , data = mtcars, ntree = 30)
+
 # Combine these forests to form a bigger one
-rf60 = Reduce(randomForest::combine, list(rf10, rf20, rf30))
-rf60
+rf60 = Reduce(randomForest::combine, list(rf10, rf20, rf30)); rf60
+
+# We can surely use Map() to generate a list of forests used here to simulate the results.
+Reduce(function(f1, f2) combine(f1,f2),
+       Map(function(nt) randomForest(mpg ~ . , data = mtcars, ntree = nt), list(10, 20, 30)))
 
 # Predicate Functionals
 list_w_na = list(x1 = c(0,1,3), x2 = c("a", NA, "0"),  x3 = c(4,5,NA))
@@ -269,24 +270,159 @@ clusterExport(cl, "randomForest")
 microbenchmark(
   Map(function(f) randomForest(f, data = ggplot2::diamonds, ntree = 10), 
       list(log(price) ~ carat, log(price) ~ y , log(price) ~ cut, log(price) ~ clarity)),
-  times = 10, unit = "s"
+  times = 5, unit = "s"
 )
 microbenchmark(
   parLapply(cl, list(log(price) ~ carat, log(price) ~ y , log(price) ~ cut, log(price) ~ clarity), 
-            function(f) randomForest(f, data = ggplot2::diamonds, ntree = 10)
+            function(f) randomForest(f, data = ggplot2::diamonds, ntree = 100)
   ),
-  times = 10, unit = "s"
+  times = 5, unit = "s"
 )
 # Stop all worker instances
 stopCluster(cl)
 
-# Using data.table
+### Using dplyr
+library(dplyr)
+# Say, our data is simple an R data frame. "mtcars" again?
+# Convert data frame into "tibble". "mtcars" has become a "tbl"
+mtcars_tb = as_tibble(mtcars); class(mtcars_tb)
+glimpse(mtcars_tb, width = 80 ) # Get a "glimpse" of a tibble
+print(mtcars_tb, n = 30) # 30 rows to show 
+
+# Using contains() and between(). Only works on local tibbles
+mtcars_tb[dplyr::between(mtcars_tb$mpg, 20, 25),]
+mtcars_tb[dplyr::contains("toyota", ignore.case = T, vars = rownames(mtcars_tb)),]
+slice(mtcars_tb, 3:5) # 3-5th rows
+
+# Just like the way we create R data frame
+aTibble = tibble(x = letters[1:5], y = lubridate::today(), z = runif(5,0,1))
+
+# More efficient versions of rbind() and cbind()
+bind_rows(aTibble, aTibble)
+bind_cols(mtcars_tb, tibble(rowNum = 1:nrow(mtcars)))
+
+
+library(RSQLite) # If our dataset is in an SQLite database
+# Create a temporary in-memory SQLite database with a table for "movies"
+con = dbConnect(RSQLite::SQLite(), dbname = ":memory:")
+# Or, create a SQLite embedded database file in hard drive
+# con = dbConnect(RSQLite::SQLite(), dbname = "./myDB.Sqlite")
+dbWriteTable(con, "movies", ggplot2movies::movies ) 
+dbListTables(con) # list tables in the database
+# Get result of a query as a data frame (a SQL pass-through query)
+movies_df = dbGetQuery(con, "select * from movies") 
+
+# Say we'd like to directly manipulate tables in the database
+sqliteDB = src_dbi(con, auto_disconnect = T)
+# movies & movies_8 are simply pointers to the tables in the database!
+movies_tb = tbl(sqliteDB, "movies")
+movies_tb_8 = movies_tb %>% filter(rating > 8) %>% select(title, year, rating)
+# tbl_lazy" denotes the "lazy evaluation" of the data manipulation
+class(movies_tb_8) 
+# Both tibbles are simply "pointers" to the tables in the database
+# The size of them are relatively smaller than original data frame
+pryr::object_size(ggplot2movies::movies)
+pryr::object_size(movies_tb)
+# We can surely check out the query plan
+dplyr::explain(movies_tb_8)
+
+# "movies_8" actually does not exist. 
+# Let's execute and store result in remote database server 
+sqliteDB # or run dbListTables(con)
+compute(movies_tb_8, name = "movie_8_table"); sqliteDB
+# We can surely download/copy the table from the database
+movies_8_df = collect(movies_tb_8)
+# How about the other way around? Copy a data frame to remote database.
+copy_to(dest = sqliteDB, df = mtcars, name = "mtcars_table", temporary = F)
+dbListTables(con)
+
+## Piping your data
+# Select by names. Equivalent to select(movies_tb, title, length, rating)
+movies_tb %>% select(title, length, rating)
+
+# title with r1-r5
+movies_tb_r1to5 = movies_tb %>% select(title, num_range(prefix="r", range = 1:5))
+explain(movies_tb_r1to5)
+
+# all variables except r1 to r10
+movies_tb %>% select(-(r1:r10))
+
+# title with any variable names that contains numbers
+movies_tb %>% select(title, matches("[[:digit:]]"))
+
+# select and rename 
+movies_tb %>% select(title, rating_1to10 = rating )
+
+# A local tibble. movies is already a tibble.
+movies_tb_local = as_tibble(ggplot2movies::movies)
+# The good, the bad, and the ugly(very long movie title?) 
+movies_tb_local %>% select(title, length, rating ) %>% 
+  filter(rating > 9 | rating < 2 | nchar(title) > 80) %>% arrange(desc(nchar(title))) 
+
+# Give me "Start Trek" series!
+movies_tb_local %>% select(title, length, rating) %>% 
+  filter(between(length, 60, 150), base::grepl("star trek", title, ignore.case = T))
+
+# Note that "grepl()" doesn't support by SQLite. Below will show an ERROR !
+movies_tb %>% select(title, length) %>% filter(grepl("star trek", title, ignore.case = T))
+
+# Split by "longShort" (Grouped by: longShort)
+movies_longShort = movies_tb %>% group_by(longShort = ifelse(length > 130, "long", "short")) 
+# Apply n() and Combine. Type ?summarise for more aggregation functions
+movies_longShort = movies_longShort %>% summarize(ct = n())
+
+# Movies rating counter
+movies_rating_ct = movies_tb %>% select(rating) %>% group_by(round_rating = round(rating, 0)) %>% 
+  dplyr::summarise( numOfObs = n()) %>% arrange(desc(round_rating)) %>% head(n = 5)
+# Equivalent to the SQL explained below
+dplyr::explain(movies_rating_ct)
+
+# Add new columns with mutate(). Only keep new columns with transmute()
+movies_tb %>% select(title, length, rating) %>% 
+  mutate(lenOfTitle = nchar(title), round_rating = round(rating, 0)) 
+
+# Sampling with sample_n() and sample_frac()
+# May only work on local R tibbles
+movies_tb_local %>% select(title, length, rating) %>% sample_frac(size = 0.7, replace = F)
+
+
+# Reshaping your tibbles with tidyr
+library(tidyr)
+reshape_tb = tibble(ID=c(1,1,1,2,2,3), time=c("t1", "t2", "t3", "t1", "t3", "t1"), 
+                    var1=c(2,4,2,1,3,2), var2=c(3,1,3,2,4,3))
+
+# from "wide" to "long" format
+gathered_tb = reshape_tb %>% gather(., key = "var", value = "val", fill= 3:4) %>% arrange(., ID, time)
+# from "long" to "wide" format
+gathered_tb %>% spread(., key = "var", value = "val")
+# Data diamonds
+diamonds_tb_local = ggplot2::diamonds %>% mutate(logPrice = log(price)) %>% select(-price)
+# Copy "diamonds" to SQLite database
+diamonds_tb_remote = copy_to(sqliteDB, diamonds_tb_local, 
+                             "diamonds", overwrite = T, temporary = F)
+# Check out tables in the database
+sqliteDB # Or dbListTables(con)
+
+# Unite columns into one using unite() and unite_()
+diamonds_tb_local %>% tidyr::unite(col = xyz, x, y, z, sep = ",")
+# Unfortunately, functions in tidyr don't work on remote databases as below 
+diamonds_tb_remote %>% tidyr::unite(col = xyz, x, y, z, sep = ",")
+# Separate columns with separate()
+hitters_tb_local = as_tibble(ISLR::Hitters) %>% mutate(hitter_name = rownames(.))
+hitters_tb_local %>% select(hitter_name, Years) %>% 
+  separate(col=hitter_name,into = c("first_name", "last_name"), sep = " ")
+# Disconnect
+dbDisconnect(con)
+
+
+### Using data.table
 library(ggplot2movies); library(data.table)
 movies_df = data.frame(movies, stringsAsFactors = F)
 movies_dt = data.table(movies, stringsAsFactors = F)
-Map(function(d) format(object.size(d), units = "auto"), 
+# Dataset size are approximately the same in new version of data.table
+Map(function(d) pryr::object_size(d), 
     list("DF" = movies_df, "DT" = movies_dt))
-
+# A simple test on filtering data
 microbenchmark(
   nrow(movies_df[movies_df$rating > 6,]),
   times = 10, unit = "s"
@@ -297,7 +433,7 @@ microbenchmark(
 )
 
 diamonds_dt = data.table(diamonds)
-# Crosstab cut by clarity. Note that ".N" is used to count # of rows
+# Frequencies of cut by clarity. Here ".N" is used to count # of rows
 diamonds_dt[, .N, .(cut, clarity) ]
 # Find thoses big diamonds > 6mm in length, width, and depth
 # setorder() is used for super fast row reordering of a data.table 
@@ -320,7 +456,7 @@ movies_dt[rating %between% list(8,9), .(title, rating)]
 fwrite(movies_dt, "movies_dt.csv", sep=",") 
 movies_dt_copy = fread("movies_dt.csv", sep=",", stringsAsFactors = F,fill = T, verbose = T)
 
-# "Real" data set operation
+# "Real" data set operations
 setTbl1 = data.table( "X1" = 1:5, "X2" = 11:15)
 setTbl2 = data.table( "X1" = 4:5, "X2" = c(13L,15L)) # 13L & 15L are integers
 fsetdiff(setTbl1, setTbl2)
@@ -425,5 +561,3 @@ summary(diamonds_bigglm)
 diamonds_df$cut = factor(diamonds_df$cut, ordered = F)
 summary(lm(log(price) ~ carat + depth + table + x + y + z + cut, diamonds_df) )
 # Notice that we removed the "order" of variable cut. Did we lost some information?
-
-

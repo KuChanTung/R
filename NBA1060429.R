@@ -1,0 +1,13 @@
+#install.packages("tree")
+#install.packages("rpart")
+#install.packages("CHAID")
+#install.packages("randomForest")
+
+NBA1617Analysis = read.csv("NBA1617TeamPerGameStats.csv",header=T)
+attach(NBA1617Analysis)
+#unlist(NBA1617Analysis)
+par(mfrow=c(2,2))
+hist(NBA1617Analysis$PTS)
+dotchart(NBA1617Analysis$PTS)
+boxplot(NBA1617Analysis$PTS)
+qqnorm(NBA1617Analysis$PTS)

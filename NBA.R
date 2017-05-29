@@ -3,35 +3,37 @@
 #####################################
 library(rpart)
 #載入鳶尾花資料集，總計150筆
-data("iris")
-iris
-dim(iris)
+#data("iris")
+NBA <- read.csv("All8083.csv",header=T,sep = ",")
+
+NBA
+dim(NBA)
 #CART決策樹
 #隨機取其中10%為測試資料
-np <-ceiling(0.1*nrow(iris))
+np <-ceiling(0.1*nrow(NBA))
 np
-test.index<-sample(1:nrow(iris),np)
+test.index<-sample(1:nrow(NBA),np)
 #測試樣本
-iris.test <-iris[test.index,]
+NBA.test <-NBA[test.index,]
 #訓練樣本
-iris.train <-iris[-test.index,]
+NBA.train <-NBA[-test.index,]
 #訓練樣本投入分類
-iris.tree <- rpart(Species~.,data=iris.train)
-iris.tree
+NBA.tree <- rpart(Stats~.,data=NBA.train)
+NBA.tree
 #畫出分類圖
-summary(iris.tree)
-plot(iris.tree);text(iris.tree)
+summary(NBA.tree)
+plot(NBA.tree);text(NBA.tree)
 #訓練樣本的混淆矩陣與辨識正確率97%
-species.train <-iris$Species[-test.index]
-train.pred <-factor(predict(iris.tree,iris.train,type = 'class'),level=levels(species.train))
-table.train <-table(species.train,train.pred)
+Stats.train <-NBA$Stats[-test.index]
+train.pred <-factor(predict(NBA.tree,NBA.train,type = 'class'),level=levels(Stats.train))
+table.train <-table(Stats.train,train.pred)
 table.train
 correct.train <-sum(diag(table.train)/sum(table.train))
 correct.train
 #測試樣本的混淆矩陣與辨識正確率80%
-species.test <-iris$Species[test.index]
-test.pred <-factor(predict(iris.tree,iris.test,type = 'class'),levels = levels(species.test))
-table.test <-table(species.test,test.pred)
+Stats.test <-NBA$Stats[test.index]
+test.pred <-factor(predict(NBA.tree,NBA.test,type = 'class'),levels = levels(Stats.test))
+table.test <-table(Stats.test,test.pred)
 table.test
 correct.test <-sum(diag(table.test)/sum(table.test))
 correct.test
@@ -65,22 +67,22 @@ sum(diag(table.chaid)/sum(table.chaid))
 library(randomForest)
 set.seed(71)
 #使用訓練樣本進行建模與評估辨識正確率97.04%
-iris.rf <-randomForest(Species~.,data=iris.train,importance=TRUE,proximity=TRUE)
-print(iris.rf)
+NBA.rf <-randomForest(Stats~.,data=NBA.train,importance=TRUE,proximity=TRUE)
+print(NBA.rf)
 #判斷變數重要性
-round(importance(iris.rf),2)
+round(importance(NBA.rf),2)
 #擷取混淆矩陣取得更精確平均辨識率95.46%
-names(iris.rf)
-sum(diag(iris.rf$confusion)/sum(iris.rf$confusion))
+names(NBA.rf)
+sum(diag(NBA.rf$confusion)/sum(NBA.rf$confusion))
 #測試樣本混淆矩陣與平均預測正確率86%
-rf.pred=predict(iris.rf,newdata = iris.test)
+rf.pred=predict(NBA.rf,newdata = NBA.test)
 rf.pred
-table.test <-table(Species=species.test,Predicated=rf.pred)
+table.test <-table(Stats=Stats.test,Predicated=rf.pred)
 table.test
 sum(diag(table.test)/sum(table.test))
 
 #利用隨機森林分群
 set.seed(17)
-iris.urf=randomForest(iris[,-5])
-iris.urf
-MDSplot(iris.urf,iris$Species,palette = rep(1,3),pch = as.numeric(iris$Species))
+NBA.urf=randomForest(NBA[,-10])
+NBA.urf
+MDSplot(NBA.urf,NBA$Stats,palette = rep(1,3),pch = as.numeric(NBA$Stats))

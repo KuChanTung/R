@@ -112,3 +112,8 @@ NBA.urf
 #畫出分類群集分析圖
 MDSplot(NBA.urf,NBA$Final,palette = rep(1,3),pch = as.numeric(NBA$Final))
 
+
+#
+GSW<- read.csv("GSW.csv",header=T,sep = ",")
+attach(GSW)
+predict (NBA.rf.Opt,newdata = data.frame(Age=28.2),type="response")

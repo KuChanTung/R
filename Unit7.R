@@ -10,7 +10,7 @@ diamonds = as.data.frame(diamonds)
 #### Note that you should replace the connection credentials with your own
 ## Using RPostgreSQL/DBI
 # Create a PostgreSQL DB connection
-pgConn = dbConnect("PostgreSQL", dbname = "yihuang", user="yihuang", password="yihuang")
+pgConn = dbConnect("PostgreSQL", dbname = "n054020006", host="127.0.0.1" ,user="n054020006", password="ndx82625")
 
 dbListTables(pgConn) # list all tables in the database
 

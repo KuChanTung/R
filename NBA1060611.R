@@ -24,7 +24,7 @@ NBA.test <-NBA.CART[test.index,]
 NBA.train <-NBA.CART[-test.index,]
 #-----------------------------------------------------------------
 
-#CART決策樹
+#利用CART決策樹找出符合NBA總冠軍的屬性條件
 #訓練樣本投入分類
 NBA.tree <- rpart(Final~.,data=NBA.train)
 NBA.tree
@@ -48,7 +48,9 @@ table.test <-table(Stats.test,test.pred)
 table.test
 correct.test <-sum(diag(table.test)/sum(table.test))
 correct.test
-
+####依據決策樹分類結果，比對2017年NBA季賽數據
+####符合條件僅金州勇士隊
+####將決策樹預測結果列為2017資料集中的Final欄位
 #----------------------------------------------------------------
 
 #條件推論樹

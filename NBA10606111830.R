@@ -8,12 +8,13 @@ library(rattle)
 NBA.Original <- read.csv("NBA19802017.csv",header=T,sep = ",")
 #取出1980年~2016年資料
 NBA <- NBA.Original[1:1014,]
+NBA2017 <- NBA.Original[1015:1044,]
 #顯示資料集
 View(NBA)
 
 #挑選出需要欄位--選擇要投入的屬性(把隊名去掉）
 #NBA.CART <-subset(NBA, select = c(TeamNme,Age,Wins,Losses,MOV,SOS,SRS,ORTG,DRTG,Pace,FTR,PAR,TS,OFFRFG,OFFTOV,OFFORB,OFFFTFGA,DFFEFG,DFFTOV,DFFDRB,DFFFTFGA,Final))
-NBA.CART <-subset(NBA, select = c(Age,Wins,Losses,MOV,SOS,SRS,ORTG,DRTG,Pace,FTR,PAR,TS,OFFRFG,OFFTOV,OFFORB,OFFFTFGA,DFFEFG,DFFTOV,DFFDRB,DFFFTFGA,Final))
+NBA.CART <-subset(NBA, select = c(Age,MOV,SOS,SRS,ORTG,DRTG,Pace,FTR,PAR,TS,OFFRFG,OFFTOV,OFFORB,OFFFTFGA,DFFEFG,DFFTOV,DFFDRB,DFFFTFGA,Final))
 
 #隨機取其中10%為測試資料
 np <-ceiling(0.1*nrow(NBA.CART))
@@ -55,6 +56,10 @@ table.test
 correct.test <-sum(diag(table.test)/sum(table.test))
 correct.test
 
+NBA.CART.PR<-predict(NBA.tree,NBA2017,type = 'prob')
+NBA.CART.PR<-predict(NBA.tree,NBA2017,type = 'class')
+
+NBA.CART.PR
 #----------------------------------------------------------------
 #利用隨機森林進行預測實做
 #----------------------------------------------------------------
@@ -63,7 +68,7 @@ library(randomForest)
 
 #挑選出需要欄位--選擇要投入的屬性
 #NBA.Record <-subset(NBA.Original, select = c(Age,Wins,Losses,MOV,SOS,SRS,ORTG,DRTG,Pace,FTR,PAR,TS,OFFRFG,OFFTOV,OFFORB,OFFFTFGA,DFFEFG,DFFTOV,DFFDRB,DFFFTFGA,Stats,Final))
-NBA.Record <-subset(NBA.Original, select = c(Age,Wins,Losses,MOV,SOS,SRS,ORTG,DRTG,Pace,FTR,PAR,TS,OFFRFG,OFFTOV,OFFORB,OFFFTFGA,DFFEFG,DFFTOV,DFFDRB,DFFFTFGA,Final))
+NBA.Record <-subset(NBA.Original, select = c(Age,MOV,SOS,SRS,ORTG,DRTG,Pace,FTR,PAR,TS,OFFRFG,OFFTOV,OFFORB,OFFFTFGA,DFFEFG,DFFTOV,DFFDRB,DFFFTFGA,Final))
 
 #指定1980至2016年的資料為訓練資料
 NBA.rf.train <- NBA.Record[1:1014,]
@@ -134,7 +139,9 @@ round(importance(NBA.rf.Opt),2)
 #----------------------------------------------
 
 #第1次預測2017年度總冠軍
-NBA.LC.prediction <- predict(NBA.rf.Opt, NBA.rf.test)
+NBA.LC.prediction <- predict(NBA.rf.Opt, NBA.rf.test,type = 'prob')
+NBA.LC.prediction <- predict(NBA.rf, NBA.rf.test,type = 'prob')
+
 #solution <- data.frame(OrininalPrediction = NBA.rf.test$Final, RF.Prediction = NBA.LC.prediction)
 solution <- data.frame(RF.Prediction = NBA.LC.prediction)
 #將預測結果寫入檔案
@@ -202,7 +209,7 @@ legend('topright', colnames(NBA.newrf$err.rate), col=1:3, fill=1:3)
 print(NBA.newrf.Opt)
 
 #第2次預測2017年度總冠軍
-NBA.LC.newprediction <- predict(NBA.newrf.Opt, NBA.newrf.test)
+NBA.LC.newprediction <- predict(NBA.newrf.Opt, NBA.newrf.test,type='prob')
 #solution <- data.frame(OrininalPrediction = NBA.rf.test$Final, RF.Prediction = NBA.LC.newprediction)
 newsolution <- data.frame(RF.Prediction = NBA.LC.newprediction)
 #將預測結果寫入檔案

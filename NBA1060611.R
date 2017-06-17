@@ -123,7 +123,7 @@ round(importance(NBA.rf.Opt),2)
 MDSplot(NBA.rf.Opt,NBA$Final,palette=rep(1,5), pch=as.numeric(NBA$Final))
 
 #預測2017年度總冠軍
-#NBA.LC.prediction <- predict(NBA.rf.Opt, NBA.rf.test)
+NBA.LC.prediction <- predict(NBA.rf.Opt, NBA.rf.test)
 solution <- data.frame(OrininalPrediction = NBA.rf.test$Final, RF.Prediction = NBA.LC.prediction)
 solution <- data.frame(RF.Prediction = NBA.LC.prediction)
 

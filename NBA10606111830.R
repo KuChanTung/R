@@ -209,7 +209,9 @@ legend('topright', colnames(NBA.newrf$err.rate), col=1:3, fill=1:3)
 print(NBA.newrf.Opt)
 
 #第2次預測2017年度總冠軍
+#NBA.LC.newprediction <- predict(NBA.newrf.Opt, NBA.newrf.test,type='prob')
 NBA.LC.newprediction <- predict(NBA.newrf.Opt, NBA.newrf.test,type='prob')
+
 #solution <- data.frame(OrininalPrediction = NBA.rf.test$Final, RF.Prediction = NBA.LC.newprediction)
 newsolution <- data.frame(RF.Prediction = NBA.LC.newprediction)
 #將預測結果寫入檔案

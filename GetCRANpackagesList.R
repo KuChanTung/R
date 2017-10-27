@@ -5,6 +5,7 @@ urlp="http://cran.r-project.org/web/views/"
 urlp
 urlpall="http://cran.r-project.org/web/packages/available_packages_by_name.html"
 
+
 doc <- htmlParse(getURL(urlp,encoding='utf-8'))
 doc
 tbls <-readHTMLTable(doc,header = FALSE,StringaAsFactors=FALSE)

@@ -1,4 +1,3 @@
-###123##
 with(iris,{
   mean(Sepal.Length)
   mean(Petal.Length)

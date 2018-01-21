@@ -7,7 +7,7 @@
 #install.packages("randomForest")
 library(randomForest)
 #setwd("C:/Users/Jialin/Desktop/BI") #把工作目錄設定在要讀取檔案所存放的目錄之下
-stud_math=read.csv("student-mat.csv",header=T,sep = ";") #讀取檔案
+stud_math=read.csv("/Users/kuchantung/Documents/GitHub/R/RandomForest/student/student-mat.csv",header=T,sep = ";") #讀取檔案
 summary(stud_math)
 
 #第33個屬性G3(也就是最終成績)，把此分數分成A,B,C,D,F五個等級

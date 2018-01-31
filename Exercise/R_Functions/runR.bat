@@ -1,0 +1,1 @@
+c:\R\R-2.10.1\bin\Rterm.exe --no-restore --no-save < $1.R > $1.Rout
